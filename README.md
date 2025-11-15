@@ -2,11 +2,11 @@
 Controllable C wasm through html/js UI 
 
 ### Build and Run:
-- set x on scripts:
+set x on scripts:
 ```sh
 chmod +x clean.sh build-build.sh get-files.sh prod-build.sh run-prod.sh
 ```
-- build and run:
+build and run:
 ```sh
 ./build-build.sh
 ```
@@ -19,3 +19,10 @@ chmod +x clean.sh build-build.sh get-files.sh prod-build.sh run-prod.sh
 ```sh
 ./run-prod.sh
 ```
+browse to http://localhost:8080  
+
+to pack for places like Netlify:
+```sh
+./pack-dist.sh
+```
+simply upload from dist folder or use netlify cli
