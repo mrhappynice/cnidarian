@@ -1,0 +1,44 @@
+# Dockerfile.build
+FROM debian:stable-slim
+
+# 1) Base deps for Emscripten / build
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    cmake \
+    python3 \
+    ca-certificates \
+    bash \
+ && rm -rf /var/lib/apt/lists/*
+
+# 2) Install Emscripten SDK (emsdk)
+RUN git clone https://github.com/emscripten-core/emsdk /emsdk \
+ && cd /emsdk \
+ && ./emsdk install latest \
+ && ./emsdk activate latest
+
+# Use bash so we can `source` emsdk_env.sh
+SHELL ["/bin/bash", "-lc"]
+
+WORKDIR /app
+
+# 3) Copy your source and web files into the image
+# Expecting the host project layout:
+#   ./src/
+#   ./web/
+COPY src ./src
+COPY web ./web
+
+# 4) Build C and C++ -> WASM + JS into ./pkg
+RUN mkdir -p pkg \
+ && source /emsdk/emsdk_env.sh \
+ && emcc src/livebg.c -O3 \
+      -sENVIRONMENT=web \
+      -sEXPORT_ES6=1 -sMODULARIZE=1 \
+      -sALLOW_MEMORY_GROWTH=1 \
+      -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'] \
+      -o pkg/livebg.js
+
+
+# Default command (handy if you want to poke around)
+CMD ["bash"]
