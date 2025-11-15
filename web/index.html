@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live BG</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; height: 100%;
+    background: #0a0a0a; overflow: hidden;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+
+  .modal {
+    position: fixed;
+    background: rgba(16,16,16,0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.45);
+    color: #eaeaea; user-select: none;
+  }
+  .modal h1 { font: 600 14px/1.2 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 0; letter-spacing: .2px; }
+  .modal .body { padding: 12px 14px 10px 14px; display: grid; gap: 12px; }
+
+  .row { display: grid; gap: 6px; }
+  .row label { font-size: 12px; color: #cfcfcf; display: flex; justify-content: space-between; align-items: center; }
+  .row input[type="range"] { width: 100%; }
+  .btns { display: flex; gap: 8px; }
+  button {
+    background: #1b1b1b; color: #f3f3f3;
+    border: 1px solid #2a2a2a; padding: 8px 10px;
+    border-radius: 10px; cursor: pointer; font-size: 13px;
+    max-height: 33px;
+  }
+  button:hover { background: #222; }
+  .meta { font-size: 12px; color: #b9b9b9; opacity: .95; display: flex; gap: 12px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.06);
+    padding: 6px 8px; border-radius: 999px; font-size: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px; padding: 2px 6px; border-radius: 6px;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+  }
+  input[type="checkbox"] { transform: translateY(1px); }
+
+
+  .drawer-tab {
+    position: fixed; top: 24px;
+    z-index: 30;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+    font-size: 12px; cursor: pointer;
+    user-select: none;
+  }
+  .drawer-tab.left { left: 16px; }
+  .drawer-tab.right { right: 16px; }
+
+
+
+  #modal {
+    top: 0; bottom: 0; left: 0; width: min(92vw, 360px);
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+    display: grid; grid-template-rows: auto 1fr;
+    transform: translateX(-100%); /* fully off-canvas while closed */
+    transition: transform .22s ease;
+    overflow: hidden;
+    z-index: 25;
+    pointer-events: none; 
+    visibility: hidden;   
+  }
+  #modal.is-open {
+    transform: translateX(0);
+    pointer-events: auto;
+    visibility: visible;
+  }
+  #modal header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+
+  #infoDrawer {
+    top: 0; bottom: 0; right: 0; width: min(92vw, 360px);
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+    display: grid; grid-template-rows: auto 1fr;
+    transform: translateX(100%);
+    transition: transform .22s ease;
+    overflow: hidden;
+    z-index: 25;
+    pointer-events: none;
+    visibility: hidden;
+  }
+  #infoDrawer.is-open {
+    transform: translateX(0);
+    pointer-events: auto;
+    visibility: visible;
+  }
+  #infoDrawer header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  } 
+  /* added my crap to fix my crap */
+  #infoDrawer .body {
+  padding: 18px 20px;
+  display: grid;
+  gap: 18px;
+}
+
+#infoDrawer .row {
+  display: grid;
+  gap: 10px;
+
+}
+
+#infoDrawer .btns {
+  justify-content: space-between;
+  flex-wrap: wrap;
+   max-height: 33px;
+
+}
+
+#infoDrawer header {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+
+  #scrim {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(2px);
+    opacity: 0; pointer-events: none; transition: opacity .18s ease;
+    z-index: 20;
+  }
+  #scrim.is-on { opacity: 1; pointer-events: auto; }
+
+
+  .link-grid {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .link-card {
+    display: grid; gap: 2px; padding: 10px; border-radius: 10px;
+    text-decoration: none; color: #f2f2f2;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: transform .14s ease, background .14s ease, border-color .14s ease;
+  }
+  .link-card:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
+  .lc-title { font-size: 13px; font-weight: 600; line-height: 1.2; }
+  .lc-sub { font-size: 12px; opacity: .85; color: #cfcfcf; }
+  .bullets { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: #d4d4d4; font-size: 13px; }
+
+
+  dialog.pop {
+    background: rgba(16,16,16,0.86);
+    color: #eaeaea;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 14px;
+    box-shadow: 0 10px 50px rgba(0,0,0,.55);
+    width: min(92vw, 520px);
+    padding: 0;
+  }
+  dialog::backdrop { background: rgba(0,0,0,0.45); backdrop-filter: blur(2px); }
+  .pop header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .pop .content { padding: 12px 14px; display: grid; gap: 10px; }
+  .close-x { background: transparent; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 6px 8px; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 900px) {
+    .link-grid { grid-template-columns: 1fr; }
+    .drawer-tab.left { top: auto; bottom: 16px; }
+    .drawer-tab.right { top: auto; bottom: 16px; right: 16px; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="c" aria-label="animated pattern"></canvas>
+
+
+  <button id="tabControls" class="drawer-tab left" aria-controls="modal" aria-expanded="false">☰ Controls</button>
+  <button id="tabInfo" class="drawer-tab right" aria-controls="infoDrawer" aria-expanded="false">Info ⓘ</button>
+
+  <div id="scrim" aria-hidden="true"></div>
+
+
+  <div class="modal" id="modal" role="region" aria-label="Controls drawer" aria-hidden="true" inert>
+    <header id="dragHandle">
+      <h1>Live BG</h1>
+      <span class="pill">controls</span>
+    </header>
+
+    <div class="body">
+      <div class="meta">
+        <span id="fps">fps: --</span>
+        <span id="pts">points: --</span>
+        <span id="spd">speed: 1.00</span>
+        <span id="zoomStat">zoom: 1.00×</span>
+      </div>
+
+      <div class="row">
+        <label>Speed <span class="kbd" id="speedVal">0.05</span></label>
+        <input id="speed" type="range" min="0.05" max="5" step="0.01" value="0.05" />
+      </div>
+
+      <div class="row">
+        <label>Density <span class="kbd" id="densVal">0.005</span></label>
+        <input id="density" type="range" min="0.005" max="0.060" step="0.001" value="0.005" />
+      </div>
+
+      <div class="row">
+        <label>Zoom <span class="kbd" id="zoomVal">1.00×</span></label>
+        <input id="zoom" type="range" min="0.5" max="4" step="0.01" value="1.00" />
+      </div>
+
+      <div class="row">
+        <label class="right">
+          <input id="zoomAuto" type="checkbox" />
+          Auto-zoom pulse
+        </label>
+      </div>
+
+      <div class="btns">
+        <button id="toggle">Pause</button>
+        <button id="reset">Reset</button>
+      </div>
+
+      <div class="meta" style="opacity:.8">
+        <span>Wheel: speed</span>
+        <span>Shift + Wheel: zoom</span>
+        <span>Keys: <span class="kbd">+</span> / <span class="kbd">−</span> to zoom</span>
+      </div>
+    </div>
+  </div>
+
+
+  <section class="modal" id="infoDrawer" role="region" aria-label="Information drawer" aria-hidden="true" inert>
+    <header>
+      <h1>Info & Links</h1>
+      <span class="pill">MHN</span>
+    </header>
+
+    <div class="body">
+      <div class="row">
+        <ul class="link-grid">
+          <li><a class="link-card" href="https://github.com/mrhappynice" target="_blank" rel="noopener">
+            <span class="lc-title">MHN Github</span>
+            <span class="lc-sub">code + projects</span>
+          </a></li>
+          <li><a class="link-card" href="https://hub.docker.com/u/mrhappynice" target="_blank" rel="noopener">
+            <span class="lc-title">MHN Docker Hub</span>
+            <span class="lc-sub">pull images</span>
+          </a></li>
+          <li><a class="link-card" href="https://www.facebook.com/groups/902226491895656" target="_blank" rel="noopener">
+            <span class="lc-title">MHN Facebook</span>
+            <span class="lc-sub">group page</span>
+          </a></li>
+          <li><a class="link-card" href="https://phrono.tech" target="_blank" rel="noopener">
+            <span class="lc-title">Phrono Tech</span>
+            <span class="lc-sub">start your computing journey, with help!</span>
+          </a></li>
+        </ul>
+      </div>
+
+      <div class="row">
+        <div class="btns">
+          <button data-pop="aboutPop">About</button>
+          <button data-pop="shortcutsPop">Contorls</button>
+          <button data-pop="themesPop">Themes</button>
+        </div>
+      </div>
+
+     <!-- <div class="row">
+        <ul class="bullets">
+          <li></li>
+          <li></li>
+          <li></li>
+        </ul>
+      </div>
+    </div>
+  </section> -->
+
+
+  <dialog class="pop" id="aboutPop">
+    <header>
+      <h1>ehhh...</h1>
+      <button class="close-x" data-close="aboutPop">✕</button>
+    </header>
+    <div class="content">
+      <p>idk, a live background template maybe. the calm space. if ya like, holler. peace :)</p>
+      <p>Mr. Happy Nice</p>
+    </div>
+  </dialog>
+
+  <dialog class="pop" id="shortcutsPop">
+    <header>
+      <h1>Keyboard & Pointer Shortcuts</h1>
+      <button class="close-x" data-close="shortcutsPop">✕</button>
+    </header>
+    <div class="content">
+      <ul class="bullets">
+        <li><span class="kbd">Shift</span> + Wheel — Zoom</li>
+        <li><span class="kbd">+</span>/<span class="kbd">−</span> — Zoom in/out</li>
+        <li>Wheel — Adjust speed</li>
+      </ul>
+    </div>
+  </dialog>
+
+  <dialog class="pop" id="themesPop">
+    <header>
+      <h1>Color & Themes</h1>
+      <button class="close-x" data-close="themesPop">✕</button>
+    </header>
+    <div class="content">
+      <p>Not wired to the canvas yet, but here are palette ideas:</p>
+      <div class="btns">
+        <button data-theme="classic">Classic White</button>
+        <button data-theme="neon">Neon Mist</button>
+        <button data-theme="embers">Embers</button>
+      </div>
+      <p class="meta">Selecting a theme will preview UI accents; hook into the canvas later if desired.</p>
+    </div>
+  </dialog>
+
+
+  <!-- keep this script with drawer/info/theme logic -->
+  <script>
+    (function() {
+    (function() {
+      const q = sel => document.querySelector(sel);
+      const controls = q('#modal');       
+      const info = q('#infoDrawer');
+      const tabControls = q('#tabControls');
+      const tabInfo = q('#tabInfo');
+      const scrim = q('#scrim');
+
+      window.addEventListener('load', () => {
+        const h = q('#dragHandle');
+        if (h) {
+          const clone = h.cloneNode(true);
+          h.parentNode.replaceChild(clone, h);
+        }
+      });
+
+      function setDrawer(open, el, tab) {
+        el.classList.toggle('is-open', !!open);
+        tab?.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+          el.removeAttribute('inert');
+          el.setAttribute('aria-hidden', 'false');
+        } else {
+          el.setAttribute('inert', '');
+          el.setAttribute('aria-hidden', 'true');
+        }
+        updateScrim();
+      }
+
+      function anyOpen() {
+        return controls.classList.contains('is-open') || info.classList.contains('is-open');
+      }
+      function updateScrim() {
+        scrim.classList.toggle('is-on', anyOpen());
+        scrim.setAttribute('aria-hidden', anyOpen() ? 'false' : 'true');
+      }
+
+      // start closed
+      setDrawer(false, controls, tabControls);
+      setDrawer(false, info, tabInfo);
+
+      tabControls.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = !controls.classList.contains('is-open');
+        setDrawer(open, controls, tabControls);
+        if (open) setDrawer(false, info, tabInfo);
+      });
+
+      tabInfo.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = !info.classList.contains('is-open');
+        setDrawer(open, info, tabInfo);
+        if (open) setDrawer(false, controls, tabControls);
+      });
+
+      scrim.addEventListener('click', () => {
+        setDrawer(false, controls, tabControls);
+        setDrawer(false, info, tabInfo);
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && anyOpen()) {
+          setDrawer(false, controls, tabControls);
+          setDrawer(false, info, tabInfo);
+        }
+      });
+
+
+      function openPop(id) {
+        const dlg = document.getElementById(id);
+        if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
+      }
+      function closePop(id) {
+        const dlg = document.getElementById(id);
+        if (dlg?.open) dlg.close();
+      }
+      document.querySelectorAll('[data-pop]').forEach(btn => {
+        btn.addEventListener('click', () => openPop(btn.getAttribute('data-pop')));
+      });
+      document.querySelectorAll('[data-close]').forEach(btn => {
+        btn.addEventListener('click', () => closePop(btn.getAttribute('data-close')));
+      });
+
+
+      const themeAccents = {
+        classic: 'rgba(255,255,255,0.12)',
+        neon: 'rgba(0,255,200,0.24)',
+        embers: 'rgba(255,120,0,0.24)'
+      };
+      document.querySelectorAll('[data-theme]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.getAttribute('data-theme');
+          const accent = themeAccents[key] || themeAccents.classic;
+          document.querySelectorAll('.pill, .link-card, .drawer-tab').forEach(el => {
+            el.style.background = accent;
+          });
+        });
+      });
+    })();
+    })();
+  </script>
+
+  <!-- new: wasm-driven animation + controls -->
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
+
+
+ 
