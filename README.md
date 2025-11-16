@@ -1,5 +1,7 @@
 # Cnidarian 
-Controllable C wasm through html/js UI 
+Controllable C wasm through html/js UI  
+
+demo: http://cnidarian.mhn.lol/
 
 ### Build and Run:
 set x on scripts:
