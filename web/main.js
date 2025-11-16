@@ -1,20 +1,53 @@
 // web/main.js
 import createLiveBg from "../pkg/livebg.js";
+import createFire   from "../pkg/fire.js";
 
-const LB = await createLiveBg();
+// ===== Effect registry & wrappers =====
 
-// C exports
-const lb_set_canvas      = LB.cwrap("lb_set_canvas", null, ["number", "number"]);
-const lb_set_density     = LB.cwrap("lb_set_density", null, ["number"]);
-const lb_set_speed       = LB.cwrap("lb_set_speed", null, ["number"]);
-const lb_set_zoom        = LB.cwrap("lb_set_zoom", null, ["number"]);
-const lb_set_zoom_auto   = LB.cwrap("lb_set_zoom_auto", null, ["number"]);
-const lb_step            = LB.cwrap("lb_step", null, ["number"]);
-const lb_get_point_count = LB.cwrap("lb_get_point_count", "number", []);
-const lb_get_positions   = LB.cwrap("lb_get_positions", "number", []);
-const lb_reset           = LB.cwrap("lb_reset", null, []);
-const lb_get_x           = LB.cwrap("lb_get_x", "number", ["number"]);
-const lb_get_y           = LB.cwrap("lb_get_y", "number", ["number"]);
+const effects = {};
+let activeEffect = "livebg";
+
+async function loadEffect(name) {
+  if (effects[name]) return effects[name];
+
+  let createFn;
+  if (name === "livebg")      createFn = createLiveBg;
+  else if (name === "fire")   createFn = createFire;
+  else throw new Error("Unknown effect: " + name);
+
+  const mod = await createFn();
+  const c = {
+    set_canvas:      mod.cwrap("lb_set_canvas", null, ["number", "number"]),
+    set_density:     mod.cwrap("lb_set_density", null, ["number"]),
+    set_speed:       mod.cwrap("lb_set_speed", null, ["number"]),
+    set_zoom:        mod.cwrap("lb_set_zoom", null, ["number"]),
+    set_zoom_auto:   mod.cwrap("lb_set_zoom_auto", null, ["number"]),
+    step:            mod.cwrap("lb_step", null, ["number"]),
+    get_point_count: mod.cwrap("lb_get_point_count", "number", []),
+    get_x:           mod.cwrap("lb_get_x", "number", ["number"]),
+    get_y:           mod.cwrap("lb_get_y", "number", ["number"]),
+    reset:           mod.cwrap("lb_reset", null, []),
+  };
+
+  effects[name] = { mod, c };
+  return effects[name];
+}
+
+function cur() {
+  return effects[activeEffect].c;
+}
+
+// C exports (wrappers that always use the active effect)
+function lb_set_canvas(width, height)    { cur().set_canvas(width, height); }
+function lb_set_density(density)         { cur().set_density(density); }
+function lb_set_speed(speed)             { cur().set_speed(speed); }
+function lb_set_zoom(zoom)               { cur().set_zoom(zoom); }
+function lb_set_zoom_auto(on)            { cur().set_zoom_auto(on); }
+function lb_step(dt)                     { cur().step(dt); }
+function lb_get_point_count()            { return cur().get_point_count(); }
+function lb_get_x(i)                     { return cur().get_x(i); }
+function lb_get_y(i)                     { return cur().get_y(i); }
+function lb_reset()                      { cur().reset(); }
 
 
 // ===== Canvas & DPI =====
@@ -36,7 +69,7 @@ function fitCanvas() {
 }
 window.addEventListener("resize", fitCanvas);
 
-// ===== UI elements (from livebg.html) =====
+// ===== UI elements =====
 const fpsEl     = document.getElementById("fps");
 const ptsEl     = document.getElementById("pts");
 const spdEl     = document.getElementById("spd");
@@ -52,6 +85,7 @@ const zoomAutoCb = document.getElementById("zoomAuto");
 
 const btnToggle  = document.getElementById("toggle");
 const btnReset   = document.getElementById("reset");
+const effectSelect = document.getElementById("effectSelect"); // optional selector
 
 // ===== State mirrored in C =====
 let speed       = 0.05;
@@ -91,7 +125,7 @@ function applyZoomAuto() {
   lb_set_zoom_auto(zoomAuto ? 1 : 0);
 }
 
-// ===== UI wiring (same behavior as original JS) =====
+// ===== UI wiring =====
 speedRange.addEventListener("input", () => {
   speed = parseFloat(speedRange.value);
   applySpeed();
@@ -125,7 +159,32 @@ btnReset.addEventListener("click", () => {
   lb_reset();
 });
 
-// Wheel: speed; Shift + Wheel: zoom  (same UX)
+// Effect selector (if present in HTML)
+if (effectSelect) {
+  effectSelect.addEventListener("change", async () => {
+    const next = effectSelect.value;
+    if (next === activeEffect) return;
+
+    running = false;
+
+    await loadEffect(next);
+    activeEffect = next;
+
+    // Re-apply canvas size & current settings to the new effect
+    lb_set_canvas(W, H);
+    applySpeed();
+    applyDensity();
+    applyZoom();
+    applyZoomAuto();
+    lb_reset();
+
+    running = true;
+    last = performance.now();
+    requestAnimationFrame(loop);
+  });
+}
+
+// Wheel: speed; Shift + Wheel: zoom
 canvas.addEventListener(
   "wheel",
   (ev) => {
@@ -162,6 +221,8 @@ window.addEventListener("keydown", (e) => {
 
 
 // ===== Initial setup =====
+await loadEffect("livebg"); // make sure default effect is ready
+
 fitCanvas();
 applySpeed();
 applyDensity();
@@ -215,13 +276,13 @@ function loop(now) {
 
   if (Number.isFinite(sx) && Number.isFinite(sy)) {
     zoomStat.textContent =
-      `zoom: ${zoom.toFixed(2)}× | sample: (${sx.toFixed(1)}, ${sy.toFixed(1)})`;
+      `zoom: ${zoom.toFixed(2)}× | sample: (${sx.toFixed(1)}, ${sy.toFixed(1)}) [${activeEffect}]`;
   } else {
     zoomStat.textContent =
-      `zoom: ${zoom.toFixed(2)}× | sample: NaN`;
+      `zoom: ${zoom.toFixed(2)}× | sample: NaN [${activeEffect}]`;
   }
 
-  // Draw all points by calling into C per point
+  // Draw all points
   ctx.fillStyle = "rgba(255,255,255,0.8)";
   const size = 3;
 
@@ -246,11 +307,4 @@ function loop(now) {
 }
 
 requestAnimationFrame(loop);
-
-
-
-
-
-
-
 
