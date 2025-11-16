@@ -37,7 +37,13 @@ RUN mkdir -p pkg \
       -sEXPORT_ES6=1 -sMODULARIZE=1 \
       -sALLOW_MEMORY_GROWTH=1 \
       -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'] \
-      -o pkg/livebg.js
+      -o pkg/livebg.js \
+ && emcc src/fire.c -O3 \
+      -sENVIRONMENT=web \
+      -sEXPORT_ES6=1 -sMODULARIZE=1 \
+      -sALLOW_MEMORY_GROWTH=1 \
+      -sEXPORTED_RUNTIME_METHODS=['ccall','cwrap'] \
+      -o pkg/fire.js
 
 
 # Default command (handy if you want to poke around)
